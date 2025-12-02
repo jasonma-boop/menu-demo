@@ -45,39 +45,36 @@
 
 
 <script type="module">
-    // 1. 引入 Firebase
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    // 注意：這裡多引入了 addDoc 和 serverTimestamp
+    import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // ⚠️⚠️⚠️ 這裡也要貼上你的鑰匙！ ⚠️⚠️⚠️
+    // ⚠️⚠️⚠️ 記得填入你的鑰匙 ⚠️⚠️⚠️
     const firebaseConfig = {
         apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
         authDomain: "menu-db-b25a3.firebaseapp.com",
         projectId: "menu-db-b25a3",
         storageBucket: "menu-db-b25a3.firebasestorage.app",
         messagingSenderId: "575823211478",
-        appId: "1:575823211478:web:950ced76ff34f586d0d277",
-        measurementId: "G-JFKTC11P7P"
+        appId: "1:575823211478:web:950ced76ff34f586d0d277"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
     let cart = {}; 
-    let menuData = []; // 改成空陣列，等待從資料庫抓取
+    let menuData = [];
 
-    // 2. 從資料庫讀取菜單
+    // 1. 讀取菜單 (維持不變)
     async function loadMenu() {
         const querySnapshot = await getDocs(collection(db, "menu"));
         menuData = [];
         querySnapshot.forEach((doc) => {
-            // 把資料庫的資料存進 menuData，並加上 ID
             menuData.push({ id: doc.id, ...doc.data() });
         });
-        renderMenu(); // 資料抓到了，開始畫畫面
+        renderMenu();
     }
 
-    // 3. 渲染畫面 (跟原本差不多)
     function renderMenu() {
         const container = document.getElementById('menu-container');
         let html = '';
@@ -96,16 +93,14 @@
                     </div>
                 </div>
                 <input type="text" class="form-control form-control-sm" 
-                    placeholder="${item.placeholder || '請輸入需求...'}" 
+                    placeholder="${item.placeholder || '備註...'}" 
                     oninput="window.updateNote('${item.id}', this.value)">
-            </div>
-            `;
+            </div>`;
         });
         container.innerHTML = html;
     }
 
-    // --- 下面是原本的購物車邏輯，為了配合 module 模式，需掛載到 window 上 ---
-    
+    // 2. 購物車邏輯 (維持不變)
     window.updateCart = function(id, qty) {
         qty = parseInt(qty);
         if (qty > 0) {
@@ -122,46 +117,66 @@
     }
 
     window.updateNote = function(id, text) {
-        if (cart[id]) {
-            cart[id].note = text;
-        }
-    }
-
-    window.submitOrder = function() {
-        if (Object.keys(cart).length === 0) {
-            alert("請先選擇餐點喔！");
-            return;
-        }
-        console.log("送出訂單:", cart);
-        alert("訂單已送出！(目前僅顯示於 Console)");
+        if (cart[id]) cart[id].note = text;
     }
 
     function renderCartSummary() {
         const list = document.getElementById('cart-list');
         const emptyMsg = document.getElementById('empty-cart-msg');
         const totalSpan = document.getElementById('total-price');
-        
         list.innerHTML = '';
         let total = 0;
         let hasItems = false;
-
         for (let key in cart) {
             hasItems = true;
             const item = cart[key];
-            const subtotal = item.price * item.qty;
-            total += subtotal;
-            list.innerHTML += `
-                <li class="list-group-item d-flex justify-content-between lh-sm">
-                    <div><h6 class="my-0">${item.name} x ${item.qty}</h6><small class="text-muted">${item.note}</small></div>
-                    <span class="text-muted">$${subtotal}</span>
-                </li>`;
+            total += item.price * item.qty;
+            list.innerHTML += `<li class="list-group-item">
+                ${item.name} x ${item.qty} <small class="text-muted">(${item.note})</small>
+                <span class="float-end">$${item.price * item.qty}</span>
+            </li>`;
         }
         totalSpan.innerText = total;
         if (hasItems) { emptyMsg.style.display = 'none'; list.style.display = 'block'; }
         else { emptyMsg.style.display = 'block'; list.style.display = 'none'; }
     }
 
-    // 啟動！
+    // 3. 【新功能】送出訂單
+    window.submitOrder = async function() {
+        if (Object.keys(cart).length === 0) {
+            alert("購物車是空的喔！");
+            return;
+        }
+        
+        // 取得桌號 (這裡先寫死 T01，之後可以從網址抓)
+        const tableId = "T01"; 
+        
+        // 計算總金額
+        let total = 0;
+        for(let key in cart) total += cart[key].price * cart[key].qty;
+
+        try {
+            // 寫入資料庫
+            await addDoc(collection(db, "orders"), {
+                table: tableId,
+                items: cart,     // 購物車內容
+                total: total,    // 總金額
+                status: "pending", // 狀態：待處理
+                createdAt: serverTimestamp() // 訂單時間
+            });
+
+            alert("✅ 訂單已傳送給廚房！");
+            cart = {}; // 清空購物車
+            renderCartSummary(); // 重繪畫面
+            // 所有輸入框歸零 (簡單暴力法：重新整理頁面，或者手動清空)
+            location.reload(); 
+
+        } catch (error) {
+            console.error("訂單傳送失敗:", error);
+            alert("❌ 傳送失敗，請找服務人員");
+        }
+    }
+
     loadMenu();
 </script>
 
