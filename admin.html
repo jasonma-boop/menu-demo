@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>老闆後台 - 新增菜單</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+    <div class="container" style="max-width: 600px;">
+        <h3>👨‍🍳 新增菜單品項</h3>
+        <hr>
+        <div class="mb-3">
+            <label>菜名</label>
+            <input type="text" id="name" class="form-control" placeholder="例如：炸雞排">
+        </div>
+        <div class="mb-3">
+            <label>價格</label>
+            <input type="number" id="price" class="form-control" placeholder="例如：80">
+        </div>
+        <div class="mb-3">
+            <label>備註提示 (選填)</label>
+            <input type="text" id="note" class="form-control" placeholder="例如：要切/不切">
+        </div>
+        <button id="addBtn" class="btn btn-primary w-100">新增上架</button>
+        
+        <div class="mt-4">
+            <h5>已上架清單：</h5>
+            <ul id="menuList" class="list-group"></ul>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // ⚠️⚠️⚠️ 請將你剛剛在 Firebase 複製的內容貼在下面這裡！ ⚠️⚠️⚠️
+        const firebaseConfig = {
+            apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
+            authDomain: "menu-db-b25a3.firebaseapp.com",
+            projectId: "menu-db-b25a3",
+            storageBucket: "menu-db-b25a3.firebasestorage.app",
+            messagingSenderId: "575823211478",
+            appId: "1:575823211478:web:950ced76ff34f586d0d277"
+        };
+        // ⬆️⬆️⬆️ 記得把上面的內容換成你自己的！
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 新增功能
+        document.getElementById('addBtn').addEventListener('click', async () => {
+            const name = document.getElementById('name').value;
+            const price = Number(document.getElementById('price').value);
+            const note = document.getElementById('note').value;
+
+            if(!name || !price) { alert("請輸入菜名和價格"); return; }
+
+            try {
+                await addDoc(collection(db, "menu"), {
+                    name: name,
+                    price: price,
+                    placeholder: note
+                });
+                alert("✅ 新增成功！");
+                document.getElementById('name').value = ''; // 清空欄位
+                document.getElementById('price').value = '';
+                document.getElementById('note').value = '';
+            } catch (e) {
+                console.error("Error: ", e);
+                alert("❌ 新增失敗，請檢查 F12 Console");
+            }
+        });
+
+        // 即時顯示目前的菜單
+        onSnapshot(collection(db, "menu"), (snapshot) => {
+            const list = document.getElementById('menuList');
+            list.innerHTML = "";
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                list.innerHTML += `<li class="list-group-item">${data.name} - $${data.price}</li>`;
+            });
+        });
+    </script>
+</body>
+</html>

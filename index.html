@@ -41,20 +41,43 @@
     </button>
 </div>
 
-<script>
-    // 1. 模擬後台資料庫：這裡是管理員設定的菜單
-    const menuData = [
-        { id: 1, name: "牛肉麵", price: 120, placeholder: "客製化 (例: 少麵、不蔥)" },
-        { id: 2, name: "啤酒", price: 150, placeholder: "備註 (例: 要冰杯)" },
-        { id: 3, name: "濃湯", price: 60, placeholder: "備註 (例: 多胡椒)" },
-        { id: 4, name: "可樂", price: 30, placeholder: "" },
-        { id: 5, name: "香蒜麵包", price: 45, placeholder: "" }
-    ];
 
-    // 儲存客人的選擇
+
+
+<script type="module">
+    // 1. 引入 Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // ⚠️⚠️⚠️ 這裡也要貼上你的鑰匙！ ⚠️⚠️⚠️
+    const firebaseConfig = {
+        apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
+        authDomain: "menu-db-b25a3.firebaseapp.com",
+        projectId: "menu-db-b25a3",
+        storageBucket: "menu-db-b25a3.firebasestorage.app",
+        messagingSenderId: "575823211478",
+        appId: "1:575823211478:web:950ced76ff34f586d0d277",
+        measurementId: "G-JFKTC11P7P"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
     let cart = {}; 
+    let menuData = []; // 改成空陣列，等待從資料庫抓取
 
-    // 2. 初始化：將菜單畫到網頁上
+    // 2. 從資料庫讀取菜單
+    async function loadMenu() {
+        const querySnapshot = await getDocs(collection(db, "menu"));
+        menuData = [];
+        querySnapshot.forEach((doc) => {
+            // 把資料庫的資料存進 menuData，並加上 ID
+            menuData.push({ id: doc.id, ...doc.data() });
+        });
+        renderMenu(); // 資料抓到了，開始畫畫面
+    }
+
+    // 3. 渲染畫面 (跟原本差不多)
     function renderMenu() {
         const container = document.getElementById('menu-container');
         let html = '';
@@ -65,50 +88,54 @@
                     <h5 class="m-0">${item.name}</h5>
                     <span class="price-tag">NT$${item.price}</span>
                 </div>
-                
                 <div class="row align-items-center mb-2">
                     <div class="col-auto">數量:</div>
                     <div class="col">
                         <input type="number" class="form-control" min="0" value="0" 
-                            onchange="updateCart(${item.id}, this.value)">
+                            onchange="window.updateCart('${item.id}', this.value)">
                     </div>
                 </div>
-
                 <input type="text" class="form-control form-control-sm" 
-                    id="note-${item.id}" 
                     placeholder="${item.placeholder || '請輸入需求...'}" 
-                    oninput="updateNote(${item.id}, this.value)">
+                    oninput="window.updateNote('${item.id}', this.value)">
             </div>
             `;
         });
         container.innerHTML = html;
     }
 
-    // 3. 更新購物車邏輯
-    function updateCart(id, qty) {
+    // --- 下面是原本的購物車邏輯，為了配合 module 模式，需掛載到 window 上 ---
+    
+    window.updateCart = function(id, qty) {
         qty = parseInt(qty);
         if (qty > 0) {
             if (!cart[id]) {
-                // 如果購物車沒這個商品，從 menuData 找資料
                 const product = menuData.find(p => p.id === id);
                 cart[id] = { ...product, qty: qty, note: "" };
             } else {
                 cart[id].qty = qty;
             }
         } else {
-            delete cart[id]; // 數量為 0 則移除
+            delete cart[id];
         }
         renderCartSummary();
     }
 
-    // 更新備註
-    function updateNote(id, text) {
+    window.updateNote = function(id, text) {
         if (cart[id]) {
             cart[id].note = text;
         }
     }
 
-    // 4. 渲染底部訂單摘要與總金額
+    window.submitOrder = function() {
+        if (Object.keys(cart).length === 0) {
+            alert("請先選擇餐點喔！");
+            return;
+        }
+        console.log("送出訂單:", cart);
+        alert("訂單已送出！(目前僅顯示於 Console)");
+    }
+
     function renderCartSummary() {
         const list = document.getElementById('cart-list');
         const emptyMsg = document.getElementById('empty-cart-msg');
@@ -123,43 +150,27 @@
             const item = cart[key];
             const subtotal = item.price * item.qty;
             total += subtotal;
-            
             list.innerHTML += `
                 <li class="list-group-item d-flex justify-content-between lh-sm">
-                    <div>
-                        <h6 class="my-0">${item.name} x ${item.qty}</h6>
-                        <small class="text-muted">${item.note ? '備註: ' + item.note : ''}</small>
-                    </div>
+                    <div><h6 class="my-0">${item.name} x ${item.qty}</h6><small class="text-muted">${item.note}</small></div>
                     <span class="text-muted">$${subtotal}</span>
-                </li>
-            `;
+                </li>`;
         }
-
         totalSpan.innerText = total;
-        
-        if (hasItems) {
-            emptyMsg.style.display = 'none';
-            list.style.display = 'block';
-        } else {
-            emptyMsg.style.display = 'block';
-            list.style.display = 'none';
-        }
+        if (hasItems) { emptyMsg.style.display = 'none'; list.style.display = 'block'; }
+        else { emptyMsg.style.display = 'block'; list.style.display = 'none'; }
     }
 
-    // 5. 送出訂單 (目前僅是用 alert 顯示，實際需要連接後端)
-    function submitOrder() {
-        if (Object.keys(cart).length === 0) {
-            alert("請先選擇餐點喔！");
-            return;
-        }
-        console.log("送出的訂單資料:", cart);
-        alert("訂單已送出！廚房準備中...\n(詳細資料請看 F12 Console)");
-        // 這裡未來會寫入: fetch('api/order', { method: 'POST', body: ... })
-    }
-
-    // 啟動程式
-    renderMenu();
+    // 啟動！
+    loadMenu();
 </script>
+
+
+
+
+
+
+
 
 </body>
 </html>
