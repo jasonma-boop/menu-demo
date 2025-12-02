@@ -21,7 +21,7 @@
 <body>
 
 <div class="container mt-3">
-    <h3>📱 桌邊點餐 (桌號: T00)</h3>
+    <h3>📱 桌邊點餐 (桌號: <span id="table-num">偵測中...</span>)</h3>
 
     <div class="section-title">🍲 菜單 Menu</div>
     <div id="menu-container">
@@ -61,6 +61,15 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
+// --- 自動抓取網址上的桌號 ---
+    const urlParams = new URLSearchParams(window.location.search);
+    // 如果網址有 ?table=xxx 就用 xxx，不然預設為 "櫃台"
+    const currentTable = urlParams.get('table') || "櫃台";
+    
+    // 把畫面上的桌號改掉
+    document.getElementById('table-num').innerText = currentTable;
+    // --- 讀取桌號 ---
 
     let cart = {}; 
     let menuData = [];
@@ -149,7 +158,7 @@
         }
         
         // 取得桌號 (這裡先寫死 T01，之後可以從網址抓)
-        const tableId = "T01"; 
+        const tableId = currentTable;
         
         // 計算總金額
         let total = 0;
