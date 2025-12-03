@@ -14,187 +14,224 @@
             background: white; padding: 15px; border-top: 1px solid #ddd;
             box-shadow: 0 -2px 10px rgba(0,0,0,0.1); text-align: center;
         }
-        .section-title { font-weight: bold; margin: 20px 0 10px 0; display: flex; align-items: center; }
-        .icon { margin-right: 5px; }
+        
+        /* 歡迎畫面樣式 */
+        #welcome-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #fff; z-index: 9999;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            padding: 20px;
+        }
+        .welcome-card {
+            width: 100%; max-width: 350px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
 
-<div class="container mt-3">
-    <h3>📱 桌邊點餐 (桌號: <span id="table-num">偵測中...</span>)</h3>
+    <div id="welcome-screen">
+        <div class="welcome-card">
+            <h2 class="mb-4">🍽️ 歡迎光臨</h2>
+            <p class="text-muted">請輸入您目前的桌號以開始點餐</p>
+            
+            <div class="mb-3">
+                <input type="text" id="tableInput" class="form-control form-control-lg text-center" placeholder="例如：1 或 A2">
+            </div>
+            
+            <button class="btn btn-primary btn-lg w-100" onclick="startOrdering()">開始點餐</button>
+        </div>
+    </div>
 
-    <div class="section-title">🍲 菜單 Menu</div>
-    <div id="menu-container">
+    <div id="main-app" style="display: none;">
+        <div class="container mt-3">
+            <h3>📱 桌邊點餐 (桌號: <span id="table-num">...</span>)</h3>
+
+            <div class="mt-4 mb-2 fw-bold">🍲 菜單 Menu</div>
+            <div id="menu-container">
+                </div>
+
+            <div class="mt-4 mb-2 fw-bold">🛒 您的訂單</div>
+            <div class="card p-3 mb-3 bg-light text-center text-muted" id="empty-cart-msg">
+                目前沒有點選任何餐點。
+            </div>
+            <ul class="list-group mb-3" id="cart-list" style="display:none;"></ul>
         </div>
 
-    <div class="section-title">🛒 您的訂單</div>
-    <div class="card p-3 mb-3 bg-light text-center text-muted" id="empty-cart-msg">
-        目前沒有點選任何餐點。
+        <div class="sticky-footer">
+            <button class="btn btn-success w-100 btn-lg" onclick="window.submitOrder()">
+                ✅ 確認送出訂單 (<span id="total-price">0</span> 元)
+            </button>
+        </div>
     </div>
-    <ul class="list-group mb-3" id="cart-list" style="display:none;">
-        </ul>
-</div>
 
-<div class="sticky-footer">
-    <button class="btn btn-success w-100 btn-lg" onclick="submitOrder()">
-        ✅ 確認送出訂單 (<span id="total-price">0</span> 元)
-    </button>
-</div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        // ⚠️⚠️⚠️ 記得填入你的鑰匙 ⚠️⚠️⚠️
+        const firebaseConfig = {
+            apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
+            authDomain: "menu-db-b25a3.firebaseapp.com",
+            projectId: "menu-db-b25a3",
+            storageBucket: "menu-db-b25a3.firebasestorage.app",
+            messagingSenderId: "575823211478",
+            appId: "1:575823211478:web:950ced76ff34f586d0d277"
+        };
 
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
+        let cart = {}; 
+        let menuData = [];
+        let currentTable = ""; // 儲存目前的桌號
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    // 注意：這裡多引入了 addDoc 和 serverTimestamp
-    import { getFirestore, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        // --- 核心邏輯：判斷是否需要輸入桌號 ---
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlTable = urlParams.get('table');
 
-    // ⚠️⚠️⚠️ 記得填入你的鑰匙 ⚠️⚠️⚠️
-    const firebaseConfig = {
-        apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
-        authDomain: "menu-db-b25a3.firebaseapp.com",
-        projectId: "menu-db-b25a3",
-        storageBucket: "menu-db-b25a3.firebasestorage.app",
-        messagingSenderId: "575823211478",
-        appId: "1:575823211478:web:950ced76ff34f586d0d277"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
-// --- 自動抓取網址上的桌號 ---
-    const urlParams = new URLSearchParams(window.location.search);
-    // 如果網址有 ?table=xxx 就用 xxx，不然預設為 "櫃台"
-    const currentTable = urlParams.get('table') || "櫃台";
-    
-    // 把畫面上的桌號改掉
-    document.getElementById('table-num').innerText = currentTable;
-    // --- 讀取桌號 ---
-
-    let cart = {}; 
-    let menuData = [];
-
-    // 1. 讀取菜單 (維持不變)
-    async function loadMenu() {
-        const querySnapshot = await getDocs(collection(db, "menu"));
-        menuData = [];
-        querySnapshot.forEach((doc) => {
-            menuData.push({ id: doc.id, ...doc.data() });
-        });
-        renderMenu();
-    }
-
-    function renderMenu() {
-        const container = document.getElementById('menu-container');
-        let html = '';
-        menuData.forEach(item => {
-            html += `
-            <div class="menu-item">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="m-0">${item.name}</h5>
-                    <span class="price-tag">NT$${item.price}</span>
-                </div>
-                <div class="row align-items-center mb-2">
-                    <div class="col-auto">數量:</div>
-                    <div class="col">
-                        <input type="number" class="form-control" min="0" value="0" 
-                            onchange="window.updateCart('${item.id}', this.value)">
-                    </div>
-                </div>
-                <input type="text" class="form-control form-control-sm" 
-                    placeholder="${item.placeholder || '備註...'}" 
-                    oninput="window.updateNote('${item.id}', this.value)">
-            </div>`;
-        });
-        container.innerHTML = html;
-    }
-
-    // 2. 購物車邏輯 (維持不變)
-    window.updateCart = function(id, qty) {
-        qty = parseInt(qty);
-        if (qty > 0) {
-            if (!cart[id]) {
-                const product = menuData.find(p => p.id === id);
-                cart[id] = { ...product, qty: qty, note: "" };
+            if (urlTable) {
+                // 狀況 A：網址已經有桌號 (例如 ?table=5) -> 直接進菜單
+                enterApp(urlTable);
             } else {
-                cart[id].qty = qty;
+                // 狀況 B：網址沒桌號 -> 停留在歡迎畫面，等待輸入
+                // (不需要做任何事，因為 HTML 預設就是顯示歡迎畫面)
             }
-        } else {
-            delete cart[id];
         }
-        renderCartSummary();
-    }
 
-    window.updateNote = function(id, text) {
-        if (cart[id]) cart[id].note = text;
-    }
+        // 當使用者按下「開始點餐」
+        window.startOrdering = function() {
+            const input = document.getElementById('tableInput').value.trim();
+            if (!input) {
+                alert("請輸入桌號才能點餐喔！");
+                return;
+            }
+            // 使用 pushState 修改網址但不重新整理 (變成 ?table=輸入的值)
+            // 這樣客人如果重新整理網頁，才不會又跳回輸入畫面
+            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?table=' + input;
+            window.history.pushState({path: newUrl}, '', newUrl);
 
-    function renderCartSummary() {
-        const list = document.getElementById('cart-list');
-        const emptyMsg = document.getElementById('empty-cart-msg');
-        const totalSpan = document.getElementById('total-price');
-        list.innerHTML = '';
-        let total = 0;
-        let hasItems = false;
-        for (let key in cart) {
-            hasItems = true;
-            const item = cart[key];
-            total += item.price * item.qty;
-            list.innerHTML += `<li class="list-group-item">
-                ${item.name} x ${item.qty} <small class="text-muted">(${item.note})</small>
-                <span class="float-end">$${item.price * item.qty}</span>
-            </li>`;
+            enterApp(input);
         }
-        totalSpan.innerText = total;
-        if (hasItems) { emptyMsg.style.display = 'none'; list.style.display = 'block'; }
-        else { emptyMsg.style.display = 'block'; list.style.display = 'none'; }
-    }
 
-    // 3. 【新功能】送出訂單
-    window.submitOrder = async function() {
-        if (Object.keys(cart).length === 0) {
-            alert("購物車是空的喔！");
-            return;
+        // 進入主程式
+        function enterApp(tableId) {
+            currentTable = tableId;
+            document.getElementById('table-num').innerText = tableId;
+            
+            // 切換畫面：隱藏歡迎頁，顯示主程式
+            document.getElementById('welcome-screen').style.display = 'none';
+            document.getElementById('main-app').style.display = 'block';
+
+            loadMenu(); // 載入菜單
         }
-        
-        // 取得桌號 (這裡先寫死 T01，之後可以從網址抓)
-        const tableId = currentTable;
-        
-        // 計算總金額
-        let total = 0;
-        for(let key in cart) total += cart[key].price * cart[key].qty;
 
-        try {
-            // 寫入資料庫
-            await addDoc(collection(db, "orders"), {
-                table: tableId,
-                items: cart,     // 購物車內容
-                total: total,    // 總金額
-                status: "pending", // 狀態：待處理
-                createdAt: serverTimestamp() // 訂單時間
+        // --- 以下是原本的點餐邏輯 (維持不變) ---
+
+        async function loadMenu() {
+            const querySnapshot = await getDocs(collection(db, "menu"));
+            menuData = [];
+            querySnapshot.forEach((doc) => {
+                menuData.push({ id: doc.id, ...doc.data() });
             });
-
-            alert("✅ 訂單已傳送給廚房！");
-            cart = {}; // 清空購物車
-            renderCartSummary(); // 重繪畫面
-            // 所有輸入框歸零 (簡單暴力法：重新整理頁面，或者手動清空)
-            location.reload(); 
-
-        } catch (error) {
-            console.error("訂單傳送失敗:", error);
-            alert("❌ 傳送失敗，請找服務人員");
+            renderMenu();
         }
-    }
 
-    loadMenu();
-</script>
+        function renderMenu() {
+            const container = document.getElementById('menu-container');
+            let html = '';
+            menuData.forEach(item => {
+                html += `
+                <div class="menu-item">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="m-0">${item.name}</h5>
+                        <span class="price-tag">NT$${item.price}</span>
+                    </div>
+                    <div class="row align-items-center mb-2">
+                        <div class="col-auto">數量:</div>
+                        <div class="col">
+                            <input type="number" class="form-control" min="0" value="0" 
+                                onchange="window.updateCart('${item.id}', this.value)">
+                        </div>
+                    </div>
+                    <input type="text" class="form-control form-control-sm" 
+                        placeholder="${item.placeholder || '備註...'}" 
+                        oninput="window.updateNote('${item.id}', this.value)">
+                </div>`;
+            });
+            container.innerHTML = html;
+        }
 
+        window.updateCart = function(id, qty) {
+            qty = parseInt(qty);
+            if (qty > 0) {
+                if (!cart[id]) {
+                    const product = menuData.find(p => p.id === id);
+                    cart[id] = { ...product, qty: qty, note: "" };
+                } else {
+                    cart[id].qty = qty;
+                }
+            } else {
+                delete cart[id];
+            }
+            renderCartSummary();
+        }
 
+        window.updateNote = function(id, text) {
+            if (cart[id]) cart[id].note = text;
+        }
 
+        function renderCartSummary() {
+            const list = document.getElementById('cart-list');
+            const emptyMsg = document.getElementById('empty-cart-msg');
+            const totalSpan = document.getElementById('total-price');
+            list.innerHTML = '';
+            let total = 0;
+            let hasItems = false;
+            for (let key in cart) {
+                hasItems = true;
+                const item = cart[key];
+                total += item.price * item.qty;
+                list.innerHTML += `<li class="list-group-item d-flex justify-content-between">
+                    <div>${item.name} x ${item.qty} <small class="text-muted">${item.note}</small></div>
+                    <span>$${item.price * item.qty}</span>
+                </li>`;
+            }
+            totalSpan.innerText = total;
+            if (hasItems) { emptyMsg.style.display = 'none'; list.style.display = 'block'; }
+            else { emptyMsg.style.display = 'block'; list.style.display = 'none'; }
+        }
 
+        window.submitOrder = async function() {
+            if (Object.keys(cart).length === 0) {
+                alert("購物車是空的喔！");
+                return;
+            }
+            
+            // 使用我們輸入的桌號
+            const tableId = currentTable; 
+            
+            let total = 0;
+            for(let key in cart) total += cart[key].price * cart[key].qty;
 
+            try {
+                await addDoc(collection(db, "orders"), {
+                    table: tableId,
+                    items: cart,
+                    total: total,
+                    status: "pending",
+                    createdAt: serverTimestamp()
+                });
 
-
-
+                alert("✅ 訂單已送出！");
+                location.reload(); // 送出後重新整理 (會變回有桌號的狀態，方便續點)
+            } catch (error) {
+                console.error("Error:", error);
+                alert("❌ 傳送失敗");
+            }
+        }
+    </script>
 </body>
 </html>
