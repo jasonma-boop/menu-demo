@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>餐廳管理系統 - 登入</title>
+    <title>餐廳管理系統 - 完整版</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .order-card { border-left: 5px solid #0d6efd; background: #fff; margin-bottom: 15px; }
         .hidden { display: none !important; }
         .login-container { max-width: 400px; margin: 100px auto; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .menu-thumb { width: 50px; height: 50px; object-fit: cover; border-radius: 5px; margin-right: 10px; }
     </style>
 </head>
 <body class="bg-light">
@@ -16,12 +17,8 @@
     <div id="loginSection" class="container">
         <div class="login-container text-center">
             <h3>🔐 員工登入</h3>
-            <div class="mb-3 mt-4">
-                <input type="email" id="loginEmail" class="form-control" placeholder="電子信箱">
-            </div>
-            <div class="mb-3">
-                <input type="password" id="loginPwd" class="form-control" placeholder="密碼">
-            </div>
+            <div class="mb-3 mt-4"><input type="email" id="loginEmail" class="form-control" placeholder="電子信箱"></div>
+            <div class="mb-3"><input type="password" id="loginPwd" class="form-control" placeholder="密碼"></div>
             <button id="btnLogin" class="btn btn-primary w-100">登入系統</button>
             <p id="loginError" class="text-danger mt-2"></p>
         </div>
@@ -29,24 +26,17 @@
 
     <div id="dashboardSection" class="container hidden p-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4>👨‍🍳 餐廳管理系統 <span id="userRoleBadge" class="badge bg-secondary">員工</span></h4>
-            <button id="btnLogout" class="btn btn-outline-danger btn-sm">登出 : <span id="currentUserEmail"></span></button>
+            <h4>👨‍🍳 餐廳管理 <span id="userRoleBadge" class="badge bg-secondary">員工</span></h4>
+            <button id="btnLogout" class="btn btn-outline-danger btn-sm">登出</button>
         </div>
 
         <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="pills-orders-tab" data-bs-toggle="pill" data-bs-target="#pills-orders" type="button">🔔 接收訂單</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="pills-menu-tab" data-bs-toggle="pill" data-bs-target="#pills-menu" type="button">📝 菜單管理</button>
-            </li>
-            <li class="nav-item hidden" id="admin-tab-li" role="presentation">
-                <button class="nav-link" id="pills-users-tab" data-bs-toggle="pill" data-bs-target="#pills-users" type="button">👥 員工管理</button>
-            </li>
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#pills-orders">🔔 訂單</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pills-menu">📝 菜單</button></li>
+            <li class="nav-item hidden" id="admin-tab-li"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pills-users">👥 員工</button></li>
         </ul>
 
-        <div class="tab-content" id="pills-tabContent">
-            
+        <div class="tab-content">
             <div class="tab-pane fade show active" id="pills-orders">
                 <div id="orderList"><p class="text-center text-muted">等待新訂單中...</p></div>
             </div>
@@ -57,9 +47,17 @@
                         <input type="text" id="name" class="form-control" placeholder="菜名">
                         <input type="number" id="price" class="form-control" placeholder="價格">
                     </div>
-                    <input type="text" id="note" class="form-control mb-2" placeholder="備註提示">
+                    <input type="text" id="note" class="form-control mb-2" placeholder="備註提示 (例: 加辣/不加辣)">
+                    
+                    <div class="mb-2">
+                        <label class="form-label small text-muted">餐點圖片網址</label>
+                        <input type="text" id="menuImgUrl" class="form-control" placeholder="https://...">
+                    </div>
+
                     <button id="addBtn" class="btn btn-primary w-100">新增菜單</button>
+                    <button id="cancelEditBtn" class="btn btn-secondary w-100 mt-2 hidden">❌ 取消修改 (回到新增模式)</button>
                 </div>
+
                 <div id="menuControlLock" class="alert alert-warning hidden">⚠️ 只有管理員可以修改菜單</div>
                 <ul id="menuList" class="list-group"></ul>
             </div>
@@ -68,11 +66,10 @@
                 <div class="card p-3">
                     <h5>新增員工帳號</h5>
                     <div class="mb-2">
-                        <input type="email" id="newStaffEmail" class="form-control mb-2" placeholder="新員工 Email">
-                        <input type="password" id="newStaffPwd" class="form-control mb-2" placeholder="設定密碼 (至少6位)">
+                        <input type="email" id="newStaffEmail" class="form-control mb-2" placeholder="Email">
+                        <input type="password" id="newStaffPwd" class="form-control mb-2" placeholder="密碼">
                     </div>
                     <button id="btnCreateUser" class="btn btn-success w-100">建立帳號</button>
-                    <p class="text-muted small mt-2">* 說明：基於安全限制，目前只能新增，若需刪除請至 Firebase Console 操作。</p>
                 </div>
             </div>
         </div>
@@ -82,11 +79,11 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        // 引入 Authentication 功能
+        // 注意：這裡多了 updateDoc
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // ⚠️⚠️⚠️ 記得填入你的鑰匙 ⚠️⚠️⚠️
+        // ⚠️⚠️⚠️ 記得填入你的 API Key ⚠️⚠️⚠️
         const firebaseConfig = {
             apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
             authDomain: "menu-db-b25a3.firebaseapp.com",
@@ -96,15 +93,14 @@
             appId: "1:575823211478:web:950ced76ff34f586d0d277"
         };
 
-        // 1. 初始化主程式
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // 🔥 設定：請在這裡輸入「老闆」的 Email (必須跟你在 Firebase Console 建立的一模一樣)
-        const ADMIN_EMAIL = "admin@ggwp.com"; 
+        const ADMIN_EMAIL = "boss@test.com"; // 🔥 請確認這裡是你的老闆 Email
+        let currentEditId = null; // 用來記錄現在正在修改哪一個 ID
 
-        // 2. 監聽登入狀態 (這是門神)
+        // --- 登入與權限邏輯 (維持不變) ---
         onAuthStateChanged(auth, (user) => {
             const loginDiv = document.getElementById('loginSection');
             const dashboardDiv = document.getElementById('dashboardSection');
@@ -113,146 +109,59 @@
             const adminTab = document.getElementById('admin-tab-li');
 
             if (user) {
-                // --- 已登入 ---
                 loginDiv.classList.add('hidden');
                 dashboardDiv.classList.remove('hidden');
-                document.getElementById('currentUserEmail').innerText = user.email;
-
-                // 檢查是否為老闆
                 if (user.email === ADMIN_EMAIL) {
-                    // 是老闆：顯示所有功能
                     document.getElementById('userRoleBadge').innerText = "超級管理員";
                     document.getElementById('userRoleBadge').className = "badge bg-danger";
                     menuPanel.classList.remove('hidden');
                     menuLock.classList.add('hidden');
-                    adminTab.classList.remove('hidden'); // 顯示員工管理分頁
+                    adminTab.classList.remove('hidden');
                 } else {
-                    // 是員工：隱藏敏感功能
                     document.getElementById('userRoleBadge').innerText = "一般員工";
-                    menuPanel.classList.add('hidden');   // 隱藏新增菜單
-                    menuLock.classList.remove('hidden'); // 顯示警告
-                    adminTab.classList.add('hidden');    // 隱藏員工管理
+                    menuPanel.classList.add('hidden');
+                    menuLock.classList.remove('hidden');
+                    adminTab.classList.add('hidden');
                 }
-
-                startListeningData(user.email === ADMIN_EMAIL); // 開始監聽資料
+                startListeningData(user.email === ADMIN_EMAIL);
             } else {
-                // --- 未登入 ---
                 loginDiv.classList.remove('hidden');
                 dashboardDiv.classList.add('hidden');
             }
         });
 
-        // 3. 登入按鈕功能
         document.getElementById('btnLogin').addEventListener('click', () => {
-            const email = document.getElementById('loginEmail').value;
-            const pwd = document.getElementById('loginPwd').value;
-            signInWithEmailAndPassword(auth, email, pwd)
-                .catch((error) => {
-                    document.getElementById('loginError').innerText = "登入失敗：" + error.message;
-                });
+            signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginPwd').value)
+                .catch(e => document.getElementById('loginError').innerText = "登入失敗：" + e.message);
         });
+        document.getElementById('btnLogout').addEventListener('click', () => { signOut(auth); location.reload(); });
 
-        // 4. 登出按鈕功能
-        document.getElementById('btnLogout').addEventListener('click', () => {
-            signOut(auth);
-            location.reload();
-        });
-
-        // 5. 【老闆功能】建立新員工帳號 (使用 Secondary App 技巧)
-        document.getElementById('btnCreateUser').addEventListener('click', async () => {
-            const newEmail = document.getElementById('newStaffEmail').value;
-            const newPwd = document.getElementById('newStaffPwd').value;
-            if (newPwd.length < 6) { alert("密碼至少要6位數"); return; }
-
-            try {
-                // 技巧：建立第二個 App 實例，這樣才不會把老闆自己登出
-                const secondaryApp = initializeApp(firebaseConfig, "Secondary");
-                const secondaryAuth = getAuth(secondaryApp);
-                
-                await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPwd);
-                
-                alert(`✅ 員工帳號 ${newEmail} 建立成功！\n請將帳密交給員工。`);
-                document.getElementById('newStaffEmail').value = "";
-                document.getElementById('newStaffPwd').value = "";
-                
-                // 銷毀臨時實例
-                // deleteApp(secondaryApp); // 簡單版可省略
-            } catch (error) {
-                console.error(error);
-                alert("❌ 建立失敗：" + error.message);
-            }
-        });
-
-
-        // 6. 資料監聽 (包成函式，登入後才執行)
-        function startListeningData(isAdmin) {
-            
-            // A. 訂單監聽 (老闆員工都看得到)
-            const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-            onSnapshot(q, (snapshot) => {
-                const container = document.getElementById('orderList');
-                container.innerHTML = "";
-                if (snapshot.empty) { container.innerHTML = '<p class="text-center text-muted">目前沒有訂單</p>'; return; }
-
-                snapshot.forEach(docSnapshot => {
-                    const order = docSnapshot.data();
-                    let itemsHtml = "";
-                    for (let key in order.items) itemsHtml += `<div>• ${order.items[key].name} x ${order.items[key].qty}</div>`;
-                    
-                    container.innerHTML += `
-                    <div class="card p-3 shadow-sm order-card">
-                        <div class="d-flex justify-content-between">
-                            <h5>桌號: ${order.table}</h5>
-                            <button class="btn btn-success btn-sm" onclick="window.finishOrder('${docSnapshot.id}')">完成</button>
-                        </div>
-                        <hr class="my-2">${itemsHtml}
-                        <div class="text-end fw-bold mt-2">總計: $${order.total}</div>
-                    </div>`;
-                });
-            });
-
-            // B. 菜單監聽 (如果是員工，只能看不能刪)
-            onSnapshot(collection(db, "menu"), (snapshot) => {
-                const list = document.getElementById('menuList');
-                list.innerHTML = "";
-                snapshot.forEach(d => {
-                    const data = d.data();
-                    let deleteBtn = "";
-                    // 只有老闆才有刪除按鈕
-                    if (isAdmin) {
-                        deleteBtn = `<button class="btn btn-sm btn-danger del-btn" data-id="${d.id}">刪除</button>`;
-                    }
-                    
-                    const li = document.createElement('li');
-                    li.className = "list-group-item d-flex justify-content-between align-items-center";
-                    li.innerHTML = `${data.name} ($${data.price}) ${deleteBtn}`;
-                    list.appendChild(li);
-                });
-
-                if (isAdmin) {
-                    document.querySelectorAll('.del-btn').forEach(btn => {
-                        btn.onclick = () => deleteDoc(doc(db, "menu", btn.dataset.id));
-                    });
-                }
-            });
-        }
-
-        // 定義全域功能
-        window.finishOrder = async function(id) {
-            if(confirm("確定完成？")) await deleteDoc(doc(db, "orders", id));
-        }
-
-        // C. 新增菜單 (只有老闆能觸發)
+        // --- 新增 / 修改 邏輯整合 ---
         document.getElementById('addBtn').addEventListener('click', async () => {
             const name = document.getElementById('name').value;
             const price = Number(document.getElementById('price').value);
             const note = document.getElementById('note').value;
-            if(name && price) {
-                await addDoc(collection(db, "menu"), { name, price, placeholder: note });
-                document.getElementById('name').value=''; document.getElementById('price').value='';
-            }
-        });
+            const imageUrl = document.getElementById('menuImgUrl').value;
 
-    </script>
-</body>
-</html>
+            if(!name || !price) { alert("請輸入菜名和價格"); return; }
+
+            try {
+                if (currentEditId) {
+                    // === 如果有 Edit ID，代表是「修改模式」 ===
+                    await updateDoc(doc(db, "menu", currentEditId), {
+                        name, price, placeholder: note, image: imageUrl
+                    });
+                    alert("✅ 修改成功！");
+                    resetForm(); // 改完後重置表單
+                } else {
+                    // === 如果沒有 ID，代表是「新增模式」 ===
+                    await addDoc(collection(db, "menu"), { 
+                        name, price, placeholder: note, image: imageUrl
+                    });
+                    alert("✅ 新增成功！");
+                    resetForm(); // 新增完也清空
+                }
+            } catch (e) {
+                console.error(e);
+                alert("❌ 操作失敗：" + e.message);
+            }
