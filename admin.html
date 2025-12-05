@@ -165,3 +165,122 @@
                 console.error(e);
                 alert("❌ 操作失敗：" + e.message);
             }
+        });
+
+        // 取消修改按鈕
+        document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+
+        // 重置表單的函式
+        function resetForm() {
+            currentEditId = null; // 清除編輯狀態
+            document.getElementById('name').value = ''; 
+            document.getElementById('price').value = '';
+            document.getElementById('note').value = '';
+            document.getElementById('menuImgUrl').value = '';
+            
+            // 恢復按鈕文字與顏色
+            const btn = document.getElementById('addBtn');
+            btn.innerText = "新增菜單";
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-primary');
+            
+            // 隱藏取消按鈕
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            
+            // 滾動回頂端
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // --- 資料監聽與顯示 ---
+        function startListeningData(isAdmin) {
+            // 訂單部分維持不變
+            onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snapshot) => {
+                const container = document.getElementById('orderList');
+                container.innerHTML = snapshot.empty ? '<p class="text-center text-muted">目前沒有訂單</p>' : '';
+                snapshot.forEach(d => {
+                    const order = d.data();
+                    let itemsHtml = "";
+                    for (let k in order.items) itemsHtml += `<div>• ${order.items[k].name} x ${order.items[k].qty}</div>`;
+                    container.innerHTML += `<div class="card p-3 shadow-sm order-card"><h5>桌號: ${order.table}</h5><hr>${itemsHtml}<div class="text-end fw-bold mt-2">$${order.total}</div><button class="btn btn-success btn-sm mt-2" onclick="window.finishOrder('${d.id}')">完成</button></div>`;
+                });
+            });
+
+            // 菜單部分 (加上修改按鈕)
+            onSnapshot(collection(db, "menu"), (snapshot) => {
+                const list = document.getElementById('menuList');
+                list.innerHTML = "";
+                snapshot.forEach(docSnapshot => {
+                    const data = docSnapshot.data();
+                    const id = docSnapshot.id;
+
+                    let imgHtml = data.image ? `<img src="${data.image}" class="menu-thumb">` : '';
+                    let actionBtns = '';
+
+                    // 只有老闆才看得到 修改/刪除 按鈕
+                    if (isAdmin) {
+                        actionBtns = `
+                            <div>
+                                <button class="btn btn-sm btn-warning me-1 edit-btn" 
+                                    data-id="${id}" 
+                                    data-name="${data.name}" 
+                                    data-price="${data.price}" 
+                                    data-note="${data.placeholder || ''}" 
+                                    data-img="${data.image || ''}">修改</button>
+                                <button class="btn btn-sm btn-danger del-btn" data-id="${id}">刪除</button>
+                            </div>
+                        `;
+                    }
+                    
+                    const li = document.createElement('li');
+                    li.className = "list-group-item d-flex align-items-center justify-content-between";
+                    li.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            ${imgHtml}
+                            <div>
+                                <div>${data.name}</div>
+                                <span class="badge bg-secondary">$${data.price}</span>
+                            </div>
+                        </div>
+                        ${actionBtns}
+                    `;
+                    list.appendChild(li);
+                });
+
+                if (isAdmin) {
+                    // 綁定刪除功能
+                    document.querySelectorAll('.del-btn').forEach(btn => btn.onclick = () => {
+                        if(confirm("確定刪除？")) deleteDoc(doc(db, "menu", btn.dataset.id));
+                    });
+
+                    // 綁定修改功能 (將資料回填到輸入框)
+                    document.querySelectorAll('.edit-btn').forEach(btn => btn.onclick = () => {
+                        const d = btn.dataset;
+                        // 1. 回填資料
+                        document.getElementById('name').value = d.name;
+                        document.getElementById('price').value = d.price;
+                        document.getElementById('note').value = d.note;
+                        document.getElementById('menuImgUrl').value = d.img;
+
+                        // 2. 切換狀態
+                        currentEditId = d.id; // 記錄 ID
+                        
+                        // 3. 改變按鈕樣式
+                        const addBtn = document.getElementById('addBtn');
+                        addBtn.innerText = "✅ 確認修改";
+                        addBtn.classList.remove('btn-primary');
+                        addBtn.classList.add('btn-success');
+
+                        // 4. 顯示取消按鈕
+                        document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+                        // 5. 滾動到最上面方便編輯
+                        document.getElementById('menuControlPanel').scrollIntoView({ behavior: 'smooth' });
+                    });
+                }
+            });
+        }
+        window.finishOrder = async function(id) { if(confirm("確定完成？")) await deleteDoc(doc(db, "orders", id)); }
+        document.getElementById('btnCreateUser').addEventListener('click', async () => { /* 員工建立邏輯省略(請複製舊的或維持不變) */ });
+    </script>
+</body>
+</html>
