@@ -63,21 +63,21 @@
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // ⚠️⚠️⚠️ 請在這裡填入你的 Firebase Config ⚠️⚠️⚠️
+        // ⚠️⚠️⚠️ 記得填入你的 Firebase Config ⚠️⚠️⚠️
         const firebaseConfig = {
-            apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
-            authDomain: "menu-db-b25a3.firebaseapp.com",
-            projectId: "menu-db-b25a3",
-            storageBucket: "menu-db-b25a3.firebasestorage.app",
-            messagingSenderId: "575823211478",
-            appId: "1:575823211478:web:950ced76ff34f586d0d277"
+            apiKey: "你的API_KEY",
+            authDomain: "你的專案ID.firebaseapp.com",
+            projectId: "你的專案ID",
+            storageBucket: "...",
+            messagingSenderId: "...",
+            appId: "..."
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // 🔥 設定老闆的 Email (權限控制用)
+        // 🔥 確認這裡是老闆 Email
         const ADMIN_EMAIL = "admin@ggwp.com"; 
 
         // --- 登入狀態監聽 ---
@@ -87,36 +87,32 @@
             const adminPanel = document.getElementById('adminPanel');
 
             if (user) {
-                // 已登入
                 loginDiv.classList.add('hidden');
                 mainDiv.classList.remove('hidden');
 
-                // 權限判斷
                 if (user.email === ADMIN_EMAIL) {
                     document.getElementById('roleBadge').innerText = "管理員";
                     document.getElementById('roleBadge').className = "badge bg-danger";
-                    adminPanel.classList.remove('hidden'); // 顯示上傳區
+                    adminPanel.classList.remove('hidden'); 
                 } else {
                     document.getElementById('roleBadge').innerText = "一般成員";
                     document.getElementById('roleBadge').className = "badge bg-success";
-                    adminPanel.classList.add('hidden');    // 隱藏上傳區
+                    adminPanel.classList.add('hidden');    
                 }
                 loadFiles(user.email === ADMIN_EMAIL);
             } else {
-                // 未登入
                 loginDiv.classList.remove('hidden');
                 mainDiv.classList.add('hidden');
             }
         });
 
-        // --- 按鈕功能：登入與登出 ---
         document.getElementById('btnLogin').addEventListener('click', () => {
             signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginPwd').value)
                 .catch(e => document.getElementById('loginError').innerText = "登入失敗：" + e.message);
         });
         document.getElementById('btnLogout').addEventListener('click', () => signOut(auth));
 
-        // --- 按鈕功能：上傳檔案 (寫入資料庫) ---
+        // --- 上傳檔案 ---
         document.getElementById('btnAddFile').addEventListener('click', async () => {
             const name = document.getElementById('fileName').value;
             const url = document.getElementById('fileUrl').value;
@@ -126,7 +122,7 @@
             try {
                 await addDoc(collection(db, "files"), {
                     name: name,
-                    url: url, // 這裡存原始連結即可，顯示時會自動轉換
+                    url: url,
                     uploader: ADMIN_EMAIL,
                     createdAt: serverTimestamp()
                 });
@@ -138,21 +134,7 @@
             }
         });
 
-        // 🛠️ 工具函式：把 Google Drive 預覽網址變成下載網址
-        function convertToDirectLink(url) {
-            try {
-                // 檢查是不是 Google Drive 的連結
-                if (url.includes("drive.google.com") && url.includes("/d/")) {
-                    // 擷取檔案 ID (在 /d/ 和 / 之間的那串亂碼)
-                    const fileId = url.split('/d/')[1].split('/')[0];
-                    // 回傳強制下載的格式
-                    return `https://drive.google.com/uc?export=download&id=${fileId}`;
-                }
-                return url; // 如果不是 Google Drive 就原樣回傳
-            } catch (e) {
-                return url;
-            }
-        }
+        // (原本的轉換函式我刪掉了，讓它直接用原始連結)
 
         // --- 讀取檔案列表 ---
         function loadFiles(isAdmin) {
@@ -170,33 +152,32 @@
                 snapshot.forEach(docSnapshot => {
                     const data = docSnapshot.data();
                     
-                    // ✨ 這裡套用了轉換函式，讓 href 變成下載連結
-                    const downloadUrl = convertToDirectLink(data.url);
-                    
-                    // 根據網址判斷圖示
+                    // 判斷圖示
                     let icon = "📄"; 
                     if(data.url.includes("drive.google.com")) icon = "☁️";
 
-                    // 管理員才有的刪除按鈕
+                    // 刪除按鈕
                     const deleteBtn = isAdmin ? 
                         `<button class="btn btn-outline-danger btn-sm ms-3 del-btn" data-id="${docSnapshot.id}">刪除</button>` : '';
 
-                    // 處理時間顯示
+                    // 時間
                     let dateStr = "";
                     if(data.createdAt) {
                         const date = data.createdAt.toDate();
                         dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${(date.getMinutes()<10?'0':'')+date.getMinutes()}`;
                     }
 
-                    // 產生 HTML
                     const item = document.createElement('div');
                     item.className = "list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3";
                     
+                    // ⚠️ 修改重點：
+                    // 1. href 改回直接用 data.url (原始連結)
+                    // 2. 加上 target="_blank" (強制開新分頁，避免蓋掉原本網站)
                     item.innerHTML = `
                         <div class="d-flex align-items-center">
                             <div class="fs-4 me-3">${icon}</div>
                             <div>
-                                <a href="${downloadUrl}" class="download-link stretched-link" style="position: relative; z-index: 1;">
+                                <a href="${data.url}" target="_blank" class="download-link stretched-link" style="position: relative; z-index: 1;">
                                     ${data.name}
                                 </a>
                                 <div class="text-muted small">上傳時間: ${dateStr}</div>
@@ -209,11 +190,10 @@
                     list.appendChild(item);
                 });
 
-                // 綁定刪除按鈕功能 (管理員用)
                 if (isAdmin) {
                     document.querySelectorAll('.del-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
-                            e.stopPropagation(); // 防止點到刪除卻觸發下載
+                            e.stopPropagation(); 
                             if(confirm("確定要刪除這個檔案連結嗎？")) {
                                 await deleteDoc(doc(db, "files", btn.dataset.id));
                             }
