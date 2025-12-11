@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>內部檔案下載中心</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .hidden { display: none !important; }
+        .login-container { max-width: 400px; margin: 80px auto; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .file-card { transition: transform 0.2s; }
+        .file-card:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .icon-box { font-size: 2rem; color: #0d6efd; margin-right: 15px; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <div id="loginSection" class="container">
+        <div class="login-container text-center">
+            <h3>📂 檔案中心登入</h3>
+            <p class="text-muted">請輸入帳號密碼以存取資源</p>
+            <div class="mb-3 mt-4"><input type="email" id="loginEmail" class="form-control" placeholder="電子信箱"></div>
+            <div class="mb-3"><input type="password" id="loginPwd" class="form-control" placeholder="密碼"></div>
+            <button id="btnLogin" class="btn btn-primary w-100">登入</button>
+            <p id="loginError" class="text-danger mt-2"></p>
+        </div>
+    </div>
+
+    <div id="mainSection" class="container hidden p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4>📂 公司資源下載區 <span id="roleBadge" class="badge bg-secondary">訪客</span></h4>
+            <button id="btnLogout" class="btn btn-outline-danger btn-sm">登出</button>
+        </div>
+
+        <div id="adminPanel" class="card p-4 mb-4 border-primary hidden" style="border-width: 2px;">
+            <h5 class="text-primary">📤 新增檔案資源 (管理員專用)</h5>
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <input type="text" id="fileName" class="form-control" placeholder="檔案顯示名稱 (例：12月會議記錄)">
+                </div>
+                <div class="col-md-6">
+                    <input type="text" id="fileUrl" class="form-control" placeholder="檔案下載連結 (Google Drive 連結)">
+                </div>
+                <div class="col-md-2">
+                    <button id="btnAddFile" class="btn btn-primary w-100">發布檔案</button>
+                </div>
+            </div>
+            <div class="form-text mt-2">💡 提示：請將檔案上傳至 Google Drive，開啟「共用 -> 知道連結的使用者皆可檢視」，再複製連結貼上。</div>
+        </div>
+
+        <div class="card p-3">
+            <h5 class="mb-3">📥 可下載檔案列表</h5>
+            <div id="fileList" class="list-group list-group-flush">
+                <div class="text-center text-muted py-4">載入中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // ⚠️⚠️⚠️ 記得填入你的 Firebase Config ⚠️⚠️⚠️
+        const firebaseConfig = {
+            apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
+            authDomain: "menu-db-b25a3.firebaseapp.com",
+            projectId: "menu-db-b25a3",
+            storageBucket: "menu-db-b25a3.firebasestorage.app",
+            messagingSenderId: "575823211478",
+            appId: "1:575823211478:web:950ced76ff34f586d0d277"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // 🔥 設定老闆的 Email (權限控制用)
+        const ADMIN_EMAIL = "boss@test.com"; 
+
+        // --- 登入狀態監聽 ---
+        onAuthStateChanged(auth, (user) => {
+            const loginDiv = document.getElementById('loginSection');
+            const mainDiv = document.getElementById('mainSection');
+            const adminPanel = document.getElementById('adminPanel');
+
+            if (user) {
+                loginDiv.classList.add('hidden');
+                mainDiv.classList.remove('hidden');
+
+                // 判斷權限
+                if (user.email === ADMIN_EMAIL) {
+                    document.getElementById('roleBadge').innerText = "管理員";
+                    document.getElementById('roleBadge').className = "badge bg-danger";
+                    adminPanel.classList.remove('hidden'); // 顯示上傳區
+                } else {
+                    document.getElementById('roleBadge').innerText = "一般成員";
+                    document.getElementById('roleBadge').className = "badge bg-success";
+                    adminPanel.classList.add('hidden');    // 隱藏上傳區
+                }
+                loadFiles(user.email === ADMIN_EMAIL);
+            } else {
+                loginDiv.classList.remove('hidden');
+                mainDiv.classList.add('hidden');
+            }
+        });
+
+        // --- 登入與登出 ---
+        document.getElementById('btnLogin').addEventListener('click', () => {
+            signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginPwd').value)
+                .catch(e => document.getElementById('loginError').innerText = "登入失敗：" + e.message);
+        });
+        document.getElementById('btnLogout').addEventListener('click', () => signOut(auth));
+
+        // --- 上傳檔案連結 (管理員) ---
+        document.getElementById('btnAddFile').addEventListener('click', async () => {
+            const name = document.getElementById('fileName').value;
+            const url = document.getElementById('fileUrl').value;
+
+            if(!name || !url) { alert("請輸入名稱和連結"); return; }
+
+            try {
+                await addDoc(collection(db, "files"), {
+                    name: name,
+                    url: url,
+                    uploader: ADMIN_EMAIL,
+                    createdAt: serverTimestamp()
+                });
+                alert("✅ 檔案發布成功！");
+                document.getElementById('fileName').value = '';
+                document.getElementById('fileUrl').value = '';
+            } catch (e) {
+                alert("❌ 發布失敗：" + e.message);
+            }
+        });
+
+        // --- 讀取檔案列表 ---
+        function loadFiles(isAdmin) {
+            const q = query(collection(db, "files"), orderBy("createdAt", "desc"));
+            onSnapshot(q, (snapshot) => {
+                const list = document.getElementById('fileList');
+                list.innerHTML = "";
+
+                if (snapshot.empty) {
+                    list.innerHTML = '<div class="text-center text-muted py-4">目前沒有檔案</div>';
+                    return;
+                }
+
+                snapshot.forEach(docSnapshot => {
+                    const data = docSnapshot.data();
+                    
+                    // 判斷是否為 Google Drive 連結，如果是，做一點小優化 (非必要)
+                    let icon = "📄"; 
+                    if(data.url.includes("drive.google.com")) icon = "googledrive";
+                    else if(data.url.includes("dropbox")) icon = "dropbox";
+
+                    // 刪除按鈕 (只有管理員看得到)
+                    const deleteBtn = isAdmin ? 
+                        `<button class="btn btn-outline-danger btn-sm ms-3 del-btn" data-id="${docSnapshot.id}">刪除</button>` : '';
+
+                    // 轉換時間
+                    let dateStr = "";
+                    if(data.createdAt) {
+                        const date = data.createdAt.toDate();
+                        dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+                    }
+
+                    const item = document.createElement('div');
+                    item.className = "list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3";
+                    item.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <div class="fs-4 me-3">🔗</div>
+                            <div>
+                                <a href="${data.url}" target="_blank" class="fw-bold text-decoration-none text-dark stretched-link" style="position: relative; z-index: 1;">
+                                    ${data.name}
+                                </a>
+                                <div class="text-muted small">上傳時間: ${dateStr}</div>
+                            </div>
+                        </div>
+                        <div style="position: relative; z-index: 2;">
+                            ${deleteBtn}
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+
+                // 綁定刪除功能
+                if (isAdmin) {
+                    document.querySelectorAll('.del-btn').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            // 阻止連結點擊事件冒泡 (避免按下刪除卻打開了下載連結)
+                            e.stopPropagation(); 
+                            if(confirm("確定要刪除這個檔案連結嗎？")) {
+                                await deleteDoc(doc(db, "files", btn.dataset.id));
+                            }
+                        });
+                    });
+                }
+            });
+        }
+    </script>
+</body>
+</html>
