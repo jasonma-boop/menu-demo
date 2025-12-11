@@ -78,12 +78,12 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        // 注意：這裡多了 updateDoc
+        // 修正 1: 這裡加上了 deleteApp
+        import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // ⚠️⚠️⚠️ 記得填入你的 API Key ⚠️⚠️⚠️
+        // 你的設定檔
         const firebaseConfig = {
             apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
             authDomain: "menu-db-b25a3.firebaseapp.com",
@@ -97,10 +97,12 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        const ADMIN_EMAIL = "admin@ggwp.com"; // 🔥 請確認這裡是你的老闆 Email
-        let currentEditId = null; // 用來記錄現在正在修改哪一個 ID
+        // 🔥 確認這裡是老闆 Email (必須跟你在 Firebase Console 用戶列表裡的一模一樣)
+        const ADMIN_EMAIL = "admin@ggwp.com"; 
+        
+        let currentEditId = null;
 
-        // --- 登入與權限邏輯 (維持不變) ---
+        // --- 登入狀態監聽 ---
         onAuthStateChanged(auth, (user) => {
             const loginDiv = document.getElementById('loginSection');
             const dashboardDiv = document.getElementById('dashboardSection');
@@ -130,13 +132,14 @@
             }
         });
 
+        // 按鈕事件
         document.getElementById('btnLogin').addEventListener('click', () => {
             signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginPwd').value)
                 .catch(e => document.getElementById('loginError').innerText = "登入失敗：" + e.message);
         });
         document.getElementById('btnLogout').addEventListener('click', () => { signOut(auth); location.reload(); });
 
-        // --- 新增 / 修改 邏輯整合 ---
+        // --- 菜單新增/修改 ---
         document.getElementById('addBtn').addEventListener('click', async () => {
             const name = document.getElementById('name').value;
             const price = Number(document.getElementById('price').value);
@@ -147,53 +150,74 @@
 
             try {
                 if (currentEditId) {
-                    // === 如果有 Edit ID，代表是「修改模式」 ===
-                    await updateDoc(doc(db, "menu", currentEditId), {
-                        name, price, placeholder: note, image: imageUrl
-                    });
+                    await updateDoc(doc(db, "menu", currentEditId), { name, price, placeholder: note, image: imageUrl });
                     alert("✅ 修改成功！");
-                    resetForm(); // 改完後重置表單
+                    resetForm();
                 } else {
-                    // === 如果沒有 ID，代表是「新增模式」 ===
-                    await addDoc(collection(db, "menu"), { 
-                        name, price, placeholder: note, image: imageUrl
-                    });
+                    await addDoc(collection(db, "menu"), { name, price, placeholder: note, image: imageUrl });
                     alert("✅ 新增成功！");
-                    resetForm(); // 新增完也清空
+                    resetForm();
                 }
             } catch (e) {
-                console.error(e);
                 alert("❌ 操作失敗：" + e.message);
             }
         });
 
-        // 取消修改按鈕
         document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
 
-        // 重置表單的函式
         function resetForm() {
-            currentEditId = null; // 清除編輯狀態
+            currentEditId = null;
             document.getElementById('name').value = ''; 
             document.getElementById('price').value = '';
             document.getElementById('note').value = '';
             document.getElementById('menuImgUrl').value = '';
             
-            // 恢復按鈕文字與顏色
             const btn = document.getElementById('addBtn');
             btn.innerText = "新增菜單";
             btn.classList.remove('btn-success');
             btn.classList.add('btn-primary');
-            
-            // 隱藏取消按鈕
             document.getElementById('cancelEditBtn').classList.add('hidden');
-            
-            // 滾動回頂端
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // --- 資料監聽與顯示 ---
+        // --- 修正 2: 這裡是你要的建立帳號功能 (我把它補回來了) ---
+        document.getElementById('btnCreateUser').addEventListener('click', async () => {
+            const newEmail = document.getElementById('newStaffEmail').value;
+            const newPwd = document.getElementById('newStaffPwd').value;
+
+            if (!newEmail || !newPwd) { alert("請輸入帳號與密碼"); return; }
+            if (newPwd.length < 6) { alert("密碼至少要 6 位數"); return; }
+
+            const btn = document.getElementById('btnCreateUser');
+            btn.disabled = true;
+            btn.innerText = "建立中...";
+
+            let secondaryApp = null;
+            try {
+                // 技巧：建立一個臨時的 Firebase App 實例來新增使用者
+                secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+                const secondaryAuth = getAuth(secondaryApp);
+                
+                await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPwd);
+                
+                alert(`✅ 員工帳號建立成功！\n帳號：${newEmail}\n密碼：${newPwd}`);
+                document.getElementById('newStaffEmail').value = "";
+                document.getElementById('newStaffPwd').value = "";
+
+            } catch (error) {
+                let msg = error.message;
+                if (error.code === 'auth/email-already-in-use') msg = "這個 Email 已經被註冊過了";
+                if (error.code === 'auth/weak-password') msg = "密碼太簡單 (至少6位)";
+                alert("❌ 建立失敗：" + msg);
+            } finally {
+                if (secondaryApp) await deleteApp(secondaryApp); 
+                btn.disabled = false;
+                btn.innerText = "建立帳號";
+            }
+        });
+
+        // --- 資料監聽 ---
         function startListeningData(isAdmin) {
-            // 訂單部分維持不變
             onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snapshot) => {
                 const container = document.getElementById('orderList');
                 container.innerHTML = snapshot.empty ? '<p class="text-center text-muted">目前沒有訂單</p>' : '';
@@ -205,82 +229,48 @@
                 });
             });
 
-            // 菜單部分 (加上修改按鈕)
             onSnapshot(collection(db, "menu"), (snapshot) => {
                 const list = document.getElementById('menuList');
                 list.innerHTML = "";
                 snapshot.forEach(docSnapshot => {
                     const data = docSnapshot.data();
                     const id = docSnapshot.id;
-
                     let imgHtml = data.image ? `<img src="${data.image}" class="menu-thumb">` : '';
                     let actionBtns = '';
 
-                    // 只有老闆才看得到 修改/刪除 按鈕
                     if (isAdmin) {
-                        actionBtns = `
-                            <div>
-                                <button class="btn btn-sm btn-warning me-1 edit-btn" 
-                                    data-id="${id}" 
-                                    data-name="${data.name}" 
-                                    data-price="${data.price}" 
-                                    data-note="${data.placeholder || ''}" 
-                                    data-img="${data.image || ''}">修改</button>
-                                <button class="btn btn-sm btn-danger del-btn" data-id="${id}">刪除</button>
-                            </div>
-                        `;
+                        actionBtns = `<div>
+                            <button class="btn btn-sm btn-warning me-1 edit-btn" data-id="${id}" data-name="${data.name}" data-price="${data.price}" data-note="${data.placeholder || ''}" data-img="${data.image || ''}">修改</button>
+                            <button class="btn btn-sm btn-danger del-btn" data-id="${id}">刪除</button>
+                        </div>`;
                     }
                     
                     const li = document.createElement('li');
                     li.className = "list-group-item d-flex align-items-center justify-content-between";
-                    li.innerHTML = `
-                        <div class="d-flex align-items-center">
-                            ${imgHtml}
-                            <div>
-                                <div>${data.name}</div>
-                                <span class="badge bg-secondary">$${data.price}</span>
-                            </div>
-                        </div>
-                        ${actionBtns}
-                    `;
+                    li.innerHTML = `<div class="d-flex align-items-center">${imgHtml}<div><div>${data.name}</div><span class="badge bg-secondary">$${data.price}</span></div></div>${actionBtns}`;
                     list.appendChild(li);
                 });
 
                 if (isAdmin) {
-                    // 綁定刪除功能
-                    document.querySelectorAll('.del-btn').forEach(btn => btn.onclick = () => {
-                        if(confirm("確定刪除？")) deleteDoc(doc(db, "menu", btn.dataset.id));
-                    });
-
-                    // 綁定修改功能 (將資料回填到輸入框)
+                    document.querySelectorAll('.del-btn').forEach(btn => btn.onclick = () => { if(confirm("確定刪除？")) deleteDoc(doc(db, "menu", btn.dataset.id)); });
                     document.querySelectorAll('.edit-btn').forEach(btn => btn.onclick = () => {
                         const d = btn.dataset;
-                        // 1. 回填資料
                         document.getElementById('name').value = d.name;
                         document.getElementById('price').value = d.price;
                         document.getElementById('note').value = d.note;
                         document.getElementById('menuImgUrl').value = d.img;
-
-                        // 2. 切換狀態
-                        currentEditId = d.id; // 記錄 ID
-                        
-                        // 3. 改變按鈕樣式
+                        currentEditId = d.id;
                         const addBtn = document.getElementById('addBtn');
                         addBtn.innerText = "✅ 確認修改";
                         addBtn.classList.remove('btn-primary');
                         addBtn.classList.add('btn-success');
-
-                        // 4. 顯示取消按鈕
                         document.getElementById('cancelEditBtn').classList.remove('hidden');
-
-                        // 5. 滾動到最上面方便編輯
                         document.getElementById('menuControlPanel').scrollIntoView({ behavior: 'smooth' });
                     });
                 }
             });
         }
         window.finishOrder = async function(id) { if(confirm("確定完成？")) await deleteDoc(doc(db, "orders", id)); }
-        document.getElementById('btnCreateUser').addEventListener('click', async () => { /* 員工建立邏輯省略(請複製舊的或維持不變) */ });
     </script>
 </body>
 </html>
