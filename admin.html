@@ -78,12 +78,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script type="module">
-        // 修正 1: 這裡加上了 deleteApp
         import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // 你的設定檔
+        // ⚠️⚠️⚠️ 記得填入你的 API Key ⚠️⚠️⚠️
         const firebaseConfig = {
             apiKey: "AIzaSyBbS-qgY5AvBnRcK3R4CRiOCQTma8DOBUg",
             authDomain: "menu-db-b25a3.firebaseapp.com",
@@ -97,12 +96,10 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // 🔥 確認這裡是老闆 Email (必須跟你在 Firebase Console 用戶列表裡的一模一樣)
-        const ADMIN_EMAIL = "admin@ggwp.com"; 
-        
+        const ADMIN_EMAIL = "admin@ggwp.com"; // 🔥 請確認老闆 Email
         let currentEditId = null;
 
-        // --- 登入狀態監聽 ---
+        // --- 登入與權限邏輯 ---
         onAuthStateChanged(auth, (user) => {
             const loginDiv = document.getElementById('loginSection');
             const dashboardDiv = document.getElementById('dashboardSection');
@@ -132,7 +129,6 @@
             }
         });
 
-        // 按鈕事件
         document.getElementById('btnLogin').addEventListener('click', () => {
             signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value, document.getElementById('loginPwd').value)
                 .catch(e => document.getElementById('loginError').innerText = "登入失敗：" + e.message);
@@ -165,39 +161,65 @@
 
         document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
 
-// --- 資料監聽 ---
+        function resetForm() {
+            currentEditId = null;
+            document.getElementById('name').value = ''; 
+            document.getElementById('price').value = '';
+            document.getElementById('note').value = '';
+            document.getElementById('menuImgUrl').value = '';
+            
+            const btn = document.getElementById('addBtn');
+            btn.innerText = "新增菜單";
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-primary');
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // --- 員工建立功能 ---
+        document.getElementById('btnCreateUser').addEventListener('click', async () => {
+            const newEmail = document.getElementById('newStaffEmail').value;
+            const newPwd = document.getElementById('newStaffPwd').value;
+
+            if (!newEmail || !newPwd) { alert("請輸入帳號與密碼"); return; }
+            if (newPwd.length < 6) { alert("密碼至少要 6 位數"); return; }
+
+            const btn = document.getElementById('btnCreateUser');
+            btn.disabled = true; btn.innerText = "建立中...";
+
+            let secondaryApp = null;
+            try {
+                secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+                const secondaryAuth = getAuth(secondaryApp);
+                await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPwd);
+                alert(`✅ 員工帳號建立成功！\n帳號：${newEmail}`);
+                document.getElementById('newStaffEmail').value = ""; document.getElementById('newStaffPwd').value = "";
+            } catch (error) {
+                alert("❌ 建立失敗：" + error.message);
+            } finally {
+                if (secondaryApp) await deleteApp(secondaryApp); 
+                btn.disabled = false; btn.innerText = "建立帳號";
+            }
+        });
+
+        // --- 資料監聽 (包含備註顯示) ---
         function startListeningData(isAdmin) {
-            // A. 訂單監聽 (修正了這裡：加上備註顯示)
             onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snapshot) => {
                 const container = document.getElementById('orderList');
                 container.innerHTML = snapshot.empty ? '<p class="text-center text-muted">目前沒有訂單</p>' : '';
-                
                 snapshot.forEach(d => {
                     const order = d.data();
                     let itemsHtml = "";
-                    
-                    // --- 這裡是被修改的地方 ---
                     for (let k in order.items) {
                         const item = order.items[k];
-                        // 判斷如果有備註，就用紅色小字顯示
                         const noteHtml = item.note ? `<span class="text-danger small ms-2">(${item.note})</span>` : '';
-                        
                         itemsHtml += `<div>• ${item.name} x <b>${item.qty}</b> ${noteHtml}</div>`;
                     }
-                    // -----------------------
-
-                    container.innerHTML += `
-                    <div class="card p-3 shadow-sm order-card">
-                        <h5>桌號: ${order.table}</h5>
-                        <hr>
-                        ${itemsHtml}
-                        <div class="text-end fw-bold mt-2">總計: $${order.total}</div>
-                        <button class="btn btn-success btn-sm mt-2" onclick="window.finishOrder('${d.id}')">完成</button>
-                    </div>`;
+                    // 注意這裡：按鈕呼叫 window.finishOrder
+                    container.innerHTML += `<div class="card p-3 shadow-sm order-card"><h5>桌號: ${order.table}</h5><hr>${itemsHtml}<div class="text-end fw-bold mt-2">總計: $${order.total}</div><button class="btn btn-success btn-sm mt-2" onclick="window.finishOrder('${d.id}')">完成</button></div>`;
                 });
             });
 
-            // B. 菜單監聽 (維持原本樣子，不用改)
             onSnapshot(collection(db, "menu"), (snapshot) => {
                 const list = document.getElementById('menuList');
                 list.innerHTML = "";
@@ -205,14 +227,7 @@
                     const data = docSnapshot.data();
                     const id = docSnapshot.id;
                     let imgHtml = data.image ? `<img src="${data.image}" class="menu-thumb">` : '';
-                    let actionBtns = '';
-
-                    if (isAdmin) {
-                        actionBtns = `<div>
-                            <button class="btn btn-sm btn-warning me-1 edit-btn" data-id="${id}" data-name="${data.name}" data-price="${data.price}" data-note="${data.placeholder || ''}" data-img="${data.image || ''}">修改</button>
-                            <button class="btn btn-sm btn-danger del-btn" data-id="${id}">刪除</button>
-                        </div>`;
-                    }
+                    let actionBtns = isAdmin ? `<div><button class="btn btn-sm btn-warning me-1 edit-btn" data-id="${id}" data-name="${data.name}" data-price="${data.price}" data-note="${data.placeholder || ''}" data-img="${data.image || ''}">修改</button><button class="btn btn-sm btn-danger del-btn" data-id="${id}">刪除</button></div>` : '';
                     
                     const li = document.createElement('li');
                     li.className = "list-group-item d-flex align-items-center justify-content-between";
@@ -224,22 +239,26 @@
                     document.querySelectorAll('.del-btn').forEach(btn => btn.onclick = () => { if(confirm("確定刪除？")) deleteDoc(doc(db, "menu", btn.dataset.id)); });
                     document.querySelectorAll('.edit-btn').forEach(btn => btn.onclick = () => {
                         const d = btn.dataset;
-                        document.getElementById('name').value = d.name;
-                        document.getElementById('price').value = d.price;
-                        document.getElementById('note').value = d.note;
-                        document.getElementById('menuImgUrl').value = d.img;
+                        document.getElementById('name').value = d.name; document.getElementById('price').value = d.price; document.getElementById('note').value = d.note; document.getElementById('menuImgUrl').value = d.img;
                         currentEditId = d.id;
-                        const addBtn = document.getElementById('addBtn');
-                        addBtn.innerText = "✅ 確認修改";
-                        addBtn.classList.remove('btn-primary');
-                        addBtn.classList.add('btn-success');
+                        const addBtn = document.getElementById('addBtn'); addBtn.innerText = "✅ 確認修改"; addBtn.classList.remove('btn-primary'); addBtn.classList.add('btn-success');
                         document.getElementById('cancelEditBtn').classList.remove('hidden');
                         document.getElementById('menuControlPanel').scrollIntoView({ behavior: 'smooth' });
                     });
                 }
             });
         }
-        window.finishOrder = async function(id) { if(confirm("確定完成？")) await deleteDoc(doc(db, "orders", id)); }
+
+        // 🔥🔥🔥 這裡就是你要的刪除功能！ 🔥🔥🔥
+        window.finishOrder = async function(id) {
+            if(confirm("確定完成訂單？(將從列表中移除)")) {
+                try {
+                    await deleteDoc(doc(db, "orders", id));
+                } catch(e) {
+                    alert("刪除失敗：" + e.message);
+                }
+            }
+        }
     </script>
 </body>
 </html>
