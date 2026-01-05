@@ -165,70 +165,39 @@
 
         document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
 
-        function resetForm() {
-            currentEditId = null;
-            document.getElementById('name').value = ''; 
-            document.getElementById('price').value = '';
-            document.getElementById('note').value = '';
-            document.getElementById('menuImgUrl').value = '';
-            
-            const btn = document.getElementById('addBtn');
-            btn.innerText = "新增菜單";
-            btn.classList.remove('btn-success');
-            btn.classList.add('btn-primary');
-            document.getElementById('cancelEditBtn').classList.add('hidden');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // --- 修正 2: 這裡是你要的建立帳號功能 (我把它補回來了) ---
-        document.getElementById('btnCreateUser').addEventListener('click', async () => {
-            const newEmail = document.getElementById('newStaffEmail').value;
-            const newPwd = document.getElementById('newStaffPwd').value;
-
-            if (!newEmail || !newPwd) { alert("請輸入帳號與密碼"); return; }
-            if (newPwd.length < 6) { alert("密碼至少要 6 位數"); return; }
-
-            const btn = document.getElementById('btnCreateUser');
-            btn.disabled = true;
-            btn.innerText = "建立中...";
-
-            let secondaryApp = null;
-            try {
-                // 技巧：建立一個臨時的 Firebase App 實例來新增使用者
-                secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
-                const secondaryAuth = getAuth(secondaryApp);
-                
-                await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPwd);
-                
-                alert(`✅ 員工帳號建立成功！\n帳號：${newEmail}\n密碼：${newPwd}`);
-                document.getElementById('newStaffEmail').value = "";
-                document.getElementById('newStaffPwd').value = "";
-
-            } catch (error) {
-                let msg = error.message;
-                if (error.code === 'auth/email-already-in-use') msg = "這個 Email 已經被註冊過了";
-                if (error.code === 'auth/weak-password') msg = "密碼太簡單 (至少6位)";
-                alert("❌ 建立失敗：" + msg);
-            } finally {
-                if (secondaryApp) await deleteApp(secondaryApp); 
-                btn.disabled = false;
-                btn.innerText = "建立帳號";
-            }
-        });
-
-        // --- 資料監聽 ---
+// --- 資料監聽 ---
         function startListeningData(isAdmin) {
+            // A. 訂單監聽 (修正了這裡：加上備註顯示)
             onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (snapshot) => {
                 const container = document.getElementById('orderList');
                 container.innerHTML = snapshot.empty ? '<p class="text-center text-muted">目前沒有訂單</p>' : '';
+                
                 snapshot.forEach(d => {
                     const order = d.data();
                     let itemsHtml = "";
-                    for (let k in order.items) itemsHtml += `<div>• ${order.items[k].name} x ${order.items[k].qty}</div>`;
-                    container.innerHTML += `<div class="card p-3 shadow-sm order-card"><h5>桌號: ${order.table}</h5><hr>${itemsHtml}<div class="text-end fw-bold mt-2">$${order.total}</div><button class="btn btn-success btn-sm mt-2" onclick="window.finishOrder('${d.id}')">完成</button></div>`;
+                    
+                    // --- 這裡是被修改的地方 ---
+                    for (let k in order.items) {
+                        const item = order.items[k];
+                        // 判斷如果有備註，就用紅色小字顯示
+                        const noteHtml = item.note ? `<span class="text-danger small ms-2">(${item.note})</span>` : '';
+                        
+                        itemsHtml += `<div>• ${item.name} x <b>${item.qty}</b> ${noteHtml}</div>`;
+                    }
+                    // -----------------------
+
+                    container.innerHTML += `
+                    <div class="card p-3 shadow-sm order-card">
+                        <h5>桌號: ${order.table}</h5>
+                        <hr>
+                        ${itemsHtml}
+                        <div class="text-end fw-bold mt-2">總計: $${order.total}</div>
+                        <button class="btn btn-success btn-sm mt-2" onclick="window.finishOrder('${d.id}')">完成</button>
+                    </div>`;
                 });
             });
 
+            // B. 菜單監聽 (維持原本樣子，不用改)
             onSnapshot(collection(db, "menu"), (snapshot) => {
                 const list = document.getElementById('menuList');
                 list.innerHTML = "";
